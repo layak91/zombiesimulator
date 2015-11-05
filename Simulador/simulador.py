@@ -48,9 +48,3 @@ class Simulator(object):
             new_events = event()
             for ev in new_events:
                 self.schedule(ev)
-
-
-
-
-
-print(adjMatrix)
