@@ -50,7 +50,7 @@ class Simulator(object):
                 self.schedule(ev)
 
 
-adjMatrix = generateMatrix(10, 0.1)
+
 
 
 print(adjMatrix)
