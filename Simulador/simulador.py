@@ -7,13 +7,13 @@ from Crypto.Util.number import size
 
 class population (object):
 	"""Representation of the population"""
-	def __init__(self, size, pInfec):
-		self.matrix = 0
+	def __init__(self, size, pInfec, pFriend):
 		self.size = size
 		self.pInfec = pInfec
-		self.generateMatrix()
-		self.contagiados = [False] * size
-		self.alive = [True] * size
+		self.pFriend = pFriend
+		self.matrix = self.generateMatrix()
+		self.contagiados = self.generateContagiados()
+		self.alive = np.array([1.0] * size)
 		self.nalive = size
 		
 		
@@ -21,12 +21,20 @@ class population (object):
 		matrix = np.zeros((self.size, self.size))
 		for i in range(0, self.size):
 			for j in range(i + 1, self.size):
-				if np.random.random() < self.pInfec:
+				if np.random.random() < self.pFriend:
 					matrix[i][j] = 1
 					matrix[j][i] = 1
-		
 		print(matrix)
 		return matrix
+		
+	def generateContagiados(self):
+		contagiados = np.array([False] * self.size)
+		for i in range(0, self.size):
+			if np.random.random() < self.pInfec:
+				contagiados[i]=True
+				
+		return contagiados
+
 	
 class Simulator (object):
 	"""Simulation environment"""  
@@ -97,7 +105,7 @@ class virus(Process):
 		return np.random.exponential(self.meanDeath)
 	
 	def infection(self):
-		return np.random.random() < self.population
+		return (np.random.random() < self.population.pInfec)
 	
 	def run(self):
 		return []
@@ -107,31 +115,50 @@ class virus(Process):
 		if self.mon:
 			self.mon.observe(self.queue, self.busy)
 		# Random Interaction
-		num = self.population.size
-		pos1 = np.random.choice([0..num], p=(self.population.alive / self.population.nalive))
-		pos2 = np.random.choice([0..num], p=((self.population.matrix[pos1] & self.population.alive)) / sum(self.population.matrix[pos1] & self.population.alive))
-		if self.population.alive[pos1] & self.population.alive[pos2]:
-			if self.population.contagiados[pos1] & self.population.contagiados[pos2] == False:
+		nodes = np.arange(0, self.population.size, 1)
+		
+		prob1 = self.population.alive / self.population.nalive
+		aux = sum(prob1)
+		#if (sum(prob1) == 1.0):
+		pos1 = np.random.choice(nodes, p=prob1)
+		#else:
+		#	pos1 = 0
+		if sum(self.population.matrix[pos1] * self.population.alive)>0:
+			prob2 = (self.population.matrix[pos1] * self.population.alive) / sum(self.population.matrix[pos1] * self.population.alive)
+			aux2 = sum(prob2)
+			if (sum(prob2) == 1.0):
+				pos2 = np.random.choice(nodes, p=prob2)
+			else:
+				pos2 = 0
+		else:
+			pos2 = 0
+		if (self.population.alive[pos1] == 1.0) & (self.population.alive[pos2] == 1.0):
+			if (self.population.contagiados[pos1]==True) & (self.population.contagiados[pos2] == False):
 				if(self.infection()):
 					self.population.contagiados[pos2] = True
-					return[self.delay(), self.death, pos2]
-			if self.population.contagiados[pos2] & self.population.contagiados[pos1] == False:
+					return[(self.delay(), self.death, pos2)]
+				else:
+					return[]
+			if (self.population.contagiados[pos2] ==True) & (self.population.contagiados[pos1] == False):
 				if(self.infection()):
 					self.population.contagiados[pos1] = True
-					return[self.delay(), self.death, pos1]
+					return[(self.delay(), self.death, pos1)]
+				else:
+					return[]
 			else:
 				return[]
 		else:
 			return[]
 
-def death(self, pos):
+	def death(self, pos):
 		self.population.contagiados[pos] = False
-		self.population.alive[pos] = False
+		self.population.alive[pos] = 0
+		return[]
 	
 if __name__ == "__main__":
 	import argparse
 	
-	pop = population(10, 0.3)
+	pop = population(10, 0.3, 0.2)
 	sim = Simulator()
 	
 	vir = virus(sim, pop, 0.5)
