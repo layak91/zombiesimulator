@@ -12,7 +12,7 @@ class Simulator(object):
         self.queue = []
         self.processes = []
     
-    def schedule(self, delay, event):
+    def schedule(self, (delay, event)):
         heappush(self.queue, (self.now + delay, event))
     
     def run(self, until=1000):

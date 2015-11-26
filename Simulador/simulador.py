@@ -2,7 +2,7 @@
 	
 from heapq import heappop, heappush
 import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from Crypto.Util.number import size
 
 class population (object):
@@ -38,15 +38,16 @@ class population (object):
 	
 class Simulator (object):
 	"""Simulation environment"""  
-	def __init__(self):
+	def __init__(self, population):
 		self.now = 0
 		self.queue = []
 		self.processes = []
+		self.population = population
 	
-	def schedule(self, (delay, event, param)):	
+	def schedule(self, (delay, event, param)):
 		heappush(self.queue, (self.now + delay, event, param))
 		
-	def run(self, until=1000):
+	def run(self, ):
 		# Initialisation
 		if not self.processes:
 			raise RuntimeError('no processes to run')
@@ -54,7 +55,10 @@ class Simulator (object):
 			self.schedule((0, p.run, None))
 		
 		# Loop
-		while self.now < until:
+		while sum(self.population.contagiados)>0:
+			aux=sum(self.population.contagiados)
+			print(aux)
+			print(self.population.contagiados)
 			self.now, event, param = heappop(self.queue)
 			# Monitoring here?
 			if param != None:
@@ -113,13 +117,14 @@ class virus(Process):
 	def interaction(self):
 		# Monitoring
 		if self.mon:
-			self.mon.observe(self.queue, self.busy)
+			death = self.population.size-self.population.nalive
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados))
 		# Random Interaction
 		nodes = np.arange(0, self.population.size, 1)
 		
 		prob1 = self.population.alive / self.population.nalive
 		aux = sum(prob1)
-		#if (sum(prob1) == 1.0):
+		#if aux == 1:
 		pos1 = np.random.choice(nodes, p=prob1)
 		#else:
 		#	pos1 = 0
@@ -151,17 +156,61 @@ class virus(Process):
 			return[]
 
 	def death(self, pos):
+		# Monitoring
+		if self.mon:
+			self.mon.observe(self.population.nalive, self.population.size-self.population.nalive, sum(self.population.contagiados))
+
 		self.population.contagiados[pos] = False
 		self.population.alive[pos] = 0
+		self.population.nalive = self.population.nalive-1
 		return[]
 	
+class Monitor(object):
+	"""Statistics gathering"""
+
+	def __init__(self, sim):
+		self.sim = sim
+		self.last = 0
+		self.dt = []
+		self.Alive = []
+		self.Death = []
+		self.Infected = []
+		
+	def observe(self, alive, death, infected):
+		self.dt.append(self.sim.now - self.last)
+		self.last = self.sim.now
+		self.Alive.append(alive)
+		self.Death.append(death)
+		self.Infected.append(infected)
+		
 if __name__ == "__main__":
 	import argparse
 	
 	pop = population(10, 0.3, 0.2)
-	sim = Simulator()
-	
-	vir = virus(sim, pop, 0.5)
+	sim = Simulator(pop)
+	mon = Monitor(sim)
+	vir = virus(sim, pop, 0.5, mon)
 	gen = InteractionsGeneretor(sim, 0.4, vir)
 	
 	sim.run()
+	
+	### Figures
+	dt = np.array(mon.dt)
+	alive = np.array(mon.Alive)
+	death = np.array(mon.Death)
+	infected = np.array(mon.Infected)
+	
+	axis = plt.subplot()
+	#axis.set_title('M/M/1, $\lambda={}, \mu={}$'.format(args.lambd, args.mu))
+	axis.set_title('Resultados')
+	
+	t = dt.cumsum()
+	axis.step(t, alive, label='Number of alive people')
+	axis.step(t, death, label='Number of death people')
+	axis.step(t, infected, label='Number of infected people')
+	
+	axis.set_xlabel('time')
+	axis.set_ylabel('# of people')
+	axis.legend()
+	
+	plt.show()
