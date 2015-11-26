@@ -4,6 +4,7 @@ from heapq import heappop, heappush
 import numpy as np
 import matplotlib.pyplot as plt
 from Crypto.Util.number import size
+from duplicity.tempdir import default
 
 class population (object):
 	"""Representation of the population"""
@@ -56,9 +57,6 @@ class Simulator (object):
 		
 		# Loop
 		while sum(self.population.contagiados)>0:
-			aux=sum(self.population.contagiados)
-			print(aux)
-			print(self.population.contagiados)
 			self.now, event, param = heappop(self.queue)
 			# Monitoring here?
 			if param != None:
@@ -85,7 +83,12 @@ class InteractionsGeneretor (Process):
 		super(InteractionsGeneretor, self).__init__(sim)
 		self.mean = mean_interinterction
 		self.virus = virus
-	
+		contador=0
+		for i in self.sim.population.contagiados:
+			if i==True:
+				heappush(self.sim.queue, (self.sim.now + self.delay()*10, self.virus.death, contador))
+			contador=contador+1
+		
 	def delay(self):
 		return np.random.exponential(self.mean)
 	
@@ -123,17 +126,17 @@ class virus(Process):
 		nodes = np.arange(0, self.population.size, 1)
 		
 		prob1 = self.population.alive / self.population.nalive
-		aux = sum(prob1)
-		#if aux == 1:
-		pos1 = np.random.choice(nodes, p=prob1)
-		#else:
-		#	pos1 = 0
+		if sum(prob1) >= 0.99999999999999:
+			pos1 = np.random.choice(nodes, p=prob1)
+		else:
+			pos1 = 0
+			print("EROR: Probabilidad 1 incorrecta")
 		if sum(self.population.matrix[pos1] * self.population.alive)>0:
 			prob2 = (self.population.matrix[pos1] * self.population.alive) / sum(self.population.matrix[pos1] * self.population.alive)
-			aux2 = sum(prob2)
-			if (sum(prob2) == 1.0):
+			if (sum(prob2) >= 0.99999999999999):
 				pos2 = np.random.choice(nodes, p=prob2)
 			else:
+				print("EROR: Probabilidad 2 incorrecta")
 				pos2 = 0
 		else:
 			pos2 = 0
@@ -141,13 +144,13 @@ class virus(Process):
 			if (self.population.contagiados[pos1]==True) & (self.population.contagiados[pos2] == False):
 				if(self.infection()):
 					self.population.contagiados[pos2] = True
-					return[(self.delay(), self.death, pos2)]
+					return[(self.delay()*10, self.death, pos2)]
 				else:
 					return[]
 			if (self.population.contagiados[pos2] ==True) & (self.population.contagiados[pos1] == False):
 				if(self.infection()):
 					self.population.contagiados[pos1] = True
-					return[(self.delay(), self.death, pos1)]
+					return[(self.delay()*10, self.death, pos1)]
 				else:
 					return[]
 			else:
@@ -186,11 +189,19 @@ class Monitor(object):
 if __name__ == "__main__":
 	import argparse
 	
-	pop = population(10, 0.3, 0.2)
+	parser = argparse.ArgumentParser(description='Simple M/M/1')
+	parser.add_argument('-pFriend',	   			type=float,	default=0.5,					help='Probabilidad de amigos')
+	parser.add_argument('-pInfec',	    		type=float,	default=0.5,					help='Probabilidad de contagio')
+	parser.add_argument('-meanDeath',			type=float,	default=0.5,		    		help='Ratio Muertes')
+	parser.add_argument('-mean_interinterction',	type=float,	default=0.5,		    		help='Ratio interacciones')
+	parser.add_argument('-size',         		type=int,	default=50,						help='Tamano matriz')
+	args = parser.parse_args()
+	
+	pop = population(args.size, args.pInfec, args.pFriend)
 	sim = Simulator(pop)
 	mon = Monitor(sim)
-	vir = virus(sim, pop, 0.5, mon)
-	gen = InteractionsGeneretor(sim, 0.4, vir)
+	vir = virus(sim, pop, args.meanDeath, mon)
+	gen = InteractionsGeneretor(sim, args.mean_interinterction, vir)
 	
 	sim.run()
 	
