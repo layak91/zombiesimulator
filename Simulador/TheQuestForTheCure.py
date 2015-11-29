@@ -17,6 +17,7 @@ class population (object):
 		self.contagiados = self.generateContagiados()
 		self.alive = np.array([1.0] * size)
 		self.nalive = size
+		self.cured = np.array([False] * self.size)
 		
 		
 	def generateMatrix(self):
@@ -100,14 +101,15 @@ class InteractionsGeneretor (Process):
 		return [(0, self.virus.interaction, None),
 			(self.delay(), self.next, None)]
 
-class virus(Process):
-	"""Server with exponential service"""
+class virus(Object):
+	"""Virus actions"""
 	
-	def __init__(self, sim, population, meanDeath, mon=None):
+	def __init__(self, sim, population, meanDeath, goberment, mon=None):
 		super(virus, self).__init__(sim)
 		self.meanDeath = meanDeath
 		self.mon = mon
 		self.population = population
+		self.goberment = goberment
 
 	def delay(self):
 		return np.random.exponential(self.meanDeath)
@@ -122,7 +124,7 @@ class virus(Process):
 		# Monitoring
 		if self.mon:
 			death = self.population.size-self.population.nalive
-			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados))
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.goberment.defcom, self.goberment.cure)
 		# Random Interaction
 		nodes = np.arange(0, self.population.size, 1)
 		
@@ -142,16 +144,19 @@ class virus(Process):
 		else:
 			pos2 = 0
 		if (self.population.alive[pos1] == 1.0) & (self.population.alive[pos2] == 1.0):
-			if (self.population.contagiados[pos1]==True) & (self.population.contagiados[pos2] == False):
-				if(self.infection()):
-					self.population.contagiados[pos2] = True
-					return[(self.delay(), self.death, pos2)]
-				else:
-					return[]
-			if (self.population.contagiados[pos2] ==True) & (self.population.contagiados[pos1] == False):
-				if(self.infection()):
-					self.population.contagiados[pos1] = True
-					return[(self.delay(), self.death, pos1)]
+			if (self.population.cured[pos1]==False) & (self.population.cured[pos2]==False):
+				if (self.population.contagiados[pos1]==True) & (self.population.contagiados[pos2] == False):
+					if(self.infection()):
+						self.population.contagiados[pos2] = True
+						return[(self.delay(), self.death, pos2)]
+					else:
+						return[]
+				if (self.population.contagiados[pos2] ==True) & (self.population.contagiados[pos1] == False):
+					if(self.infection()):
+						self.population.contagiados[pos1] = True
+						return[(self.delay(), self.death, pos1)]
+					else:
+						return[]
 				else:
 					return[]
 			else:
@@ -162,12 +167,13 @@ class virus(Process):
 	def death(self, pos):
 		# Monitoring
 		if self.mon:
-			self.mon.observe(self.population.nalive, self.population.size-self.population.nalive, sum(self.population.contagiados))
+			death = self.population.size-self.population.nalive
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.goberment.defcom, self.goberment.cure)
 
 		self.population.contagiados[pos] = False
 		self.population.alive[pos] = 0
 		self.population.nalive = self.population.nalive-1
-		return[]
+		return[(0, self.goberment, None)]
 	
 class Monitor(object):
 	"""Statistics gathering"""
@@ -179,14 +185,58 @@ class Monitor(object):
 		self.Alive = []
 		self.Death = []
 		self.Infected = []
+		self.defcom = []
+		self.cure = []
 		
-	def observe(self, alive, death, infected):
+	def observe(self, alive, death, infected, defcom, cure):
 		self.dt.append(self.sim.now - self.last)
 		self.last = self.sim.now
 		self.Alive.append(alive)
 		self.Death.append(death)
 		self.Infected.append(infected)
+		self.defcom.append(defcom)
+		self.cure.append(cure)
 		
+class Goberment(Process):
+	"""Goberment actions"""
+	
+	def __init__(self, sim, population, mon=None):
+		super(Goberment, self).__init__(sim)
+		self.population = population
+		self.defcom = 0.0
+		self.investigating = False
+		self.cure = 0.0
+		self.mon = mon
+		
+	def newDeath (self):
+		if self.mon:
+			death = self.population.size-self.population.nalive
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcom, self.cure)
+
+		defcom=float(self.population.nalive-self.population.nalive)/float(self.population.size)
+		if self.investigating == Flase:
+			if np.random.random() < self.defcom/100:
+				self.investigating = True
+			return []
+		else:
+			self.cure=self.cure + self.defcom/float(self.population.size)
+			if self.cure<100:
+				return[]
+			else:
+				return[(0, self.deliverCure, None)]
+				
+	def deviverCure (self):
+		if self.mon:
+			death = self.population.size-self.population.nalive
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcom, self.cure)
+
+		prob = self.population.alive / self.population.nalive
+		nodes = np.arange(0, self.population.size, 1)
+		pos = np.random.choice(self.nodes, p=prob)
+		self.population.contagiados[pos]=False
+		self.population.cured[pos]=True
+	
+	
 if __name__ == "__main__":
 	import argparse
 	
@@ -202,7 +252,8 @@ if __name__ == "__main__":
 	pop = population(args.size, args.pInfec, args.pFriend, args.pInfecIni)
 	sim = Simulator(pop)
 	mon = Monitor(sim)
-	vir = virus(sim, pop, args.meanDeath, mon)
+	gob = Goberment(sim, pop, mon)
+	vir = virus(sim, pop, args.meanDeath, gob, mon)
 	#aux = float(args.mean_interinterction/float(pop.size))
 	gen = InteractionsGeneretor(sim, args.mean_interinterction/float(pop.size), vir)
 	
@@ -213,6 +264,8 @@ if __name__ == "__main__":
 	alive = np.array(mon.Alive)
 	death = np.array(mon.Death)
 	infected = np.array(mon.Infected)
+	defcom = np.array(mon.defcom)
+	cure = np.array(mon.cure)
 	
 	axis = plt.subplot()
 	#axis.set_title('M/M/1, $\lambda={}, \mu={}$'.format(args.lambd, args.mu))
@@ -222,6 +275,8 @@ if __name__ == "__main__":
 	axis.step(t, alive, label='Number of alive people')
 	axis.step(t, death, label='Number of death people')
 	axis.step(t, infected, label='Number of infected people')
+	axis.step(t, defcom, label='Level of Defcom')
+	axis.step(t, cure, label='Level of Cure')
 	
 	axis.set_xlabel('Days')
 	axis.set_ylabel('# of people')
