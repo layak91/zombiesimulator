@@ -124,7 +124,7 @@ class virus(Process):
 		# Monitoring
 		if self.mon:
 			death = self.population.size-self.population.nalive
-			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.goberment.defcom, self.goberment.cure)
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.goberment.defcon, self.goberment.cure)
 		# Random Interaction
 		nodes = np.arange(0, self.population.size, 1)
 		
@@ -168,7 +168,7 @@ class virus(Process):
 		# Monitoring
 		if self.mon:
 			death = self.population.size-self.population.nalive
-			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.goberment.defcom, self.goberment.cure)
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.goberment.defcon, self.goberment.cure)
 
 		self.population.contagiados[pos] = False
 		self.population.alive[pos] = 0
@@ -185,16 +185,16 @@ class Monitor(object):
 		self.Alive = []
 		self.Death = []
 		self.Infected = []
-		self.defcom = []
+		self.defcon = []
 		self.cure = []
 		
-	def observe(self, alive, death, infected, defcom, cure):
+	def observe(self, alive, death, infected, defcon, cure):
 		self.dt.append(self.sim.now - self.last)
 		self.last = self.sim.now
 		self.Alive.append(alive)
 		self.Death.append(death)
 		self.Infected.append(infected)
-		self.defcom.append(defcom)
+		self.defcon.append(defcon)
 		self.cure.append(cure)
 		
 class Goberment(object):
@@ -203,7 +203,7 @@ class Goberment(object):
 	def __init__(self, sim, population, mon=None):
 		#super(Goberment, self).__init__(sim)
 		self.population = population
-		self.defcom = 0.0
+		self.defcon = 0.0
 		self.investigating = False
 		self.cure = 0.0
 		self.mon = mon
@@ -212,20 +212,20 @@ class Goberment(object):
 	def newDeath (self):
 		if self.mon:
 			death = self.population.size-self.population.nalive
-			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcom, self.cure)
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcon, self.cure)
 			
 		if self.cure<100.0:
 			
-			if(self.defcom < 100):
-				#self.defcom=self.defcom + float(death)/float(self.population.size)
-				self.defcom=self.defcom + 1
+			if(self.defcon < 100):
+				#self.defcon=self.defcon + float(death)/float(self.population.size)
+				self.defcon=self.defcon + 1
 				
 			if self.investigating == False:
-				if np.random.random() < self.defcom/100:
+				if np.random.random() < self.defcon/100:
 					self.investigating = True
 				return []
 			else:
-				self.cure=self.cure + self.defcom*self.population.size/10/100
+				self.cure=self.cure + self.defcon*self.population.size/10/100
 				if self.cure > 100.0:
 					self.cure = 100.0
 					
@@ -239,7 +239,7 @@ class Goberment(object):
 	def deliverCure (self):
 		if self.mon:
 			death = self.population.size-self.population.nalive
-			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcom, self.cure)
+			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcon, self.cure)
 
 		prob = (self.population.alive * np.invert(self.population.cured)) / sum(self.population.alive * np.invert(self.population.cured))
 		nodes = np.arange(0, self.population.size, 1)
@@ -276,7 +276,7 @@ if __name__ == "__main__":
 	alive = np.array(mon.Alive)
 	death = np.array(mon.Death)
 	infected = np.array(mon.Infected)
-	defcom = np.array(mon.defcom)
+	defcon = np.array(mon.defcon)
 	cure = np.array(mon.cure)
 	
 	axis = plt.subplot()
@@ -287,7 +287,7 @@ if __name__ == "__main__":
 	axis.step(t, alive, label='Number of alive people')
 	axis.step(t, death, label='Number of death people')
 	axis.step(t, infected, label='Number of infected people')
-	axis.step(t, defcom, label='Level of Defcom')
+	axis.step(t, defcon, label='Level of Defcon')
 	axis.step(t, cure, label='Level of Cure')
 	
 	axis.set_xlabel('Days')
