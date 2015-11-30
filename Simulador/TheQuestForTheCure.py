@@ -17,7 +17,7 @@ class population (object):
 		self.contagiados = self.generateContagiados()
 		self.alive = np.array([1.0] * size)
 		self.nalive = size
-		self.cured = np.array([False] * self.size)
+		self.cured = np.array([0] * self.size)
 		
 		
 	def generateMatrix(self):
@@ -50,7 +50,7 @@ class Simulator (object):
 	def schedule(self, (delay, event, param)):
 		heappush(self.queue, (self.now + delay, event, param))
 		
-	def run(self, ):
+	def run(self):
 		# Initialisation
 		if not self.processes:
 			raise RuntimeError('no processes to run')
@@ -101,7 +101,7 @@ class InteractionsGeneretor (Process):
 		return [(0, self.virus.interaction, None),
 			(self.delay(), self.next, None)]
 
-class virus(Object):
+class virus(Process):
 	"""Virus actions"""
 	
 	def __init__(self, sim, population, meanDeath, goberment, mon=None):
@@ -144,7 +144,7 @@ class virus(Object):
 		else:
 			pos2 = 0
 		if (self.population.alive[pos1] == 1.0) & (self.population.alive[pos2] == 1.0):
-			if (self.population.cured[pos1]==False) & (self.population.cured[pos2]==False):
+			if (self.population.cured[pos1]==0) & (self.population.cured[pos2]==0):
 				if (self.population.contagiados[pos1]==True) & (self.population.contagiados[pos2] == False):
 					if(self.infection()):
 						self.population.contagiados[pos2] = True
@@ -173,7 +173,7 @@ class virus(Object):
 		self.population.contagiados[pos] = False
 		self.population.alive[pos] = 0
 		self.population.nalive = self.population.nalive-1
-		return[(0, self.goberment, None)]
+		return[(0, self.goberment.newDeath, None)]
 	
 class Monitor(object):
 	"""Statistics gathering"""
@@ -197,44 +197,56 @@ class Monitor(object):
 		self.defcom.append(defcom)
 		self.cure.append(cure)
 		
-class Goberment(Process):
+class Goberment(object):
 	"""Goberment actions"""
 	
 	def __init__(self, sim, population, mon=None):
-		super(Goberment, self).__init__(sim)
+		#super(Goberment, self).__init__(sim)
 		self.population = population
 		self.defcom = 0.0
 		self.investigating = False
 		self.cure = 0.0
 		self.mon = mon
+		self.sim = sim
 		
 	def newDeath (self):
 		if self.mon:
 			death = self.population.size-self.population.nalive
 			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcom, self.cure)
-
-		defcom=float(self.population.nalive-self.population.nalive)/float(self.population.size)
-		if self.investigating == Flase:
-			if np.random.random() < self.defcom/100:
-				self.investigating = True
-			return []
-		else:
-			self.cure=self.cure + self.defcom/float(self.population.size)
-			if self.cure<100:
-				return[]
-			else:
-				return[(0, self.deliverCure, None)]
+			
+		if self.cure<100.0:
+			
+			if(self.defcom < 100):
+				#self.defcom=self.defcom + float(death)/float(self.population.size)
+				self.defcom=self.defcom + 1
 				
-	def deviverCure (self):
+			if self.investigating == False:
+				if np.random.random() < self.defcom/100:
+					self.investigating = True
+				return []
+			else:
+				self.cure=self.cure + self.defcom*self.population.size/10/100
+				if self.cure > 100.0:
+					self.cure = 100.0
+					
+				if self.cure<100:
+					return[]
+				else:
+					return[(0, self.deliverCure, None)]
+		else:
+			return[]
+				
+	def deliverCure (self):
 		if self.mon:
 			death = self.population.size-self.population.nalive
 			self.mon.observe(self.population.nalive, death, sum(self.population.contagiados), self.defcom, self.cure)
 
-		prob = self.population.alive / self.population.nalive
+		prob = (self.population.alive * np.invert(self.population.cured)) / sum(self.population.alive * np.invert(self.population.cured))
 		nodes = np.arange(0, self.population.size, 1)
-		pos = np.random.choice(self.nodes, p=prob)
+		pos = np.random.choice(nodes, p=prob)
 		self.population.contagiados[pos]=False
-		self.population.cured[pos]=True
+		self.population.cured[pos]=1.0
+		return[(0.1, self.deliverCure, None)]
 	
 	
 if __name__ == "__main__":

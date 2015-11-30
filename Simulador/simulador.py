@@ -49,7 +49,7 @@ class Simulator (object):
 	def schedule(self, (delay, event, param)):
 		heappush(self.queue, (self.now + delay, event, param))
 		
-	def run(self, ):
+	def run(self):
 		# Initialisation
 		if not self.processes:
 			raise RuntimeError('no processes to run')
